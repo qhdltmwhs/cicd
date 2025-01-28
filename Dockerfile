@@ -8,4 +8,4 @@ WORKDIR /app
 COPY build/libs/*.jar app.jar
 
 # 4. 컨테이너가 시작될 때 실행할 명령어
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "/app.jar"]
