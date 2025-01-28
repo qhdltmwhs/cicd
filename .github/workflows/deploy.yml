@@ -3,32 +3,39 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - main  # main 브랜치에 push될 때 실행
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: Setup SSH and Deploy
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-        EC2_USER: ${{ secrets.EC2_USER }}
-        EC2_HOST: ${{ secrets.EC2_HOST }}
-        REPO_URL: https://github.com/your-username/cicd.git
-      run: |
-        echo "$SSH_PRIVATE_KEY" > private_key.pem
-        chmod 600 private_key.pem
-        ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
-          if [ ! -d "~/cicd" ]; then
-            git clone $REPO_URL ~/cicd
-          fi
-          cd ~/cicd
-          git reset --hard
-          git pull origin main
-          docker-compose down
-          docker-compose up -d --build
-        EOF
+      - name: Setup SSH and Deploy
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          REPO_URL: https://github.com/qhdltmwhs/cicd.git  # 본인의 GitHub 레포지토리 URL
+        run: |
+          echo "$SSH_PRIVATE_KEY" > private_key.pem
+          chmod 600 private_key.pem
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
+            # 1️⃣ cicd 폴더가 없으면 git clone 실행
+            if [ ! -d "/home/ubuntu/cicd" ]; then
+              git clone $REPO_URL /home/ubuntu/cicd
+            fi
+          
+            # 2️⃣ cicd 디렉토리로 이동
+            cd /home/ubuntu/cicd
+          
+            # 3️⃣ 최신 코드 가져오기
+            git reset --hard
+            git pull origin main
+          
+            # 4️⃣ 프로젝트 실행 (Docker 없이 Java 실행, 이후 확장 가능)
+            ./gradlew build
+            java -jar build/libs/*.jar &
+          EOF
