@@ -36,7 +36,7 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
-// 일반 JAR 파일 비활성화
+// plain jar 생성 방지
 jar {
 	enabled = false
 }

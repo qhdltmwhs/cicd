@@ -34,6 +34,8 @@ jobs:
       # Docker 이미지 빌드 및 푸시
       - name: Build and Push Docker Image
         run: |
+          ls -la  # 현재 디렉토리 확인
+          ls -la build/libs/  # JAR 파일 확인
           docker build -t ${{ secrets.DOCKER_USERNAME }}/cicd-app:latest .
           docker push ${{ secrets.DOCKER_USERNAME }}/cicd-app:latest
 
