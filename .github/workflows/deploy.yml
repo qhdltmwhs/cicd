@@ -1,41 +1,26 @@
-name: Deploy to EC2
+name: Test SSH Connection to EC2
 
 on:
   push:
     branches:
-      - main
+      - main  # main 브랜치에 푸시될 때 실행
 
 jobs:
-  deploy:
+  test-ssh:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Setup SSH and Deploy
+      - name: Setup SSH and Create Test Folder
         env:
           SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
-          REPO_URL: https://github.com/qhdltmwhs/cicd.git  # 본인의 GitHub 레포지토리 URL
         run: |
           echo "$SSH_PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
-            # 1️⃣ cicd 폴더가 없으면 git clone 실행
-            if [ ! -d "/home/ubuntu/cicd" ]; then
-              git clone $REPO_URL /home/ubuntu/cicd
-            fi
-          
-            # 2️⃣ cicd 디렉토리로 이동
-            cd /home/ubuntu/cicd
-          
-            # 3️⃣ 최신 코드 가져오기
-            git reset --hard
-            git pull origin main
-          
-            # 4️⃣ 프로젝트 실행 (Docker 없이 Java 실행, 이후 확장 가능)
-            ./gradlew build
-            java -jar build/libs/*.jar &
+            echo "✅ SSH 접속 성공!"
+            mkdir -p ~/test-folder
+            echo "✅ ~/test-folder 생성 완료!"
+            ls -la ~  # 홈 디렉토리 내 파일 및 폴더 확인
           EOF
