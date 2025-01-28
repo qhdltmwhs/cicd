@@ -5,7 +5,7 @@ FROM openjdk:17-jdk-slim
 WORKDIR /app
 
 # 3. JAR 파일을 컨테이너에 복사
-COPY build/libs/demo-0.0.1-SNAPSHOT.jar app.jar
+COPY ./build/libs/*.jar app.jar
 
 # 4. 컨테이너가 시작될 때 실행할 명령어
 ENTRYPOINT ["java", "-jar", "app.jar"]
