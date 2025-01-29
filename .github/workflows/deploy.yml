@@ -32,7 +32,10 @@ jobs:
 
       - name: Move JAR to Project Root
         run: |
+          # 🔹 빌드된 JAR 파일을 프로젝트 루트로 이동하여 Docker 빌드 컨텍스트에 포함
+          # 🔹 Dockerfile에서 COPY 명령어가 제대로 작동하도록 설정
           cp build/libs/*.jar app.jar
+          # 🔹 현재 디렉토리의 파일 목록을 출력하여 JAR 파일이 정상적으로 이동했는지 확인
           ls -la    
 
       # Docker 로그인
@@ -60,6 +63,8 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
+          echo "$SSH_PRIVATE_KEY" > private_key.pem
+          chmod 600 private_key.pem
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST \
             "export DOCKER_USERNAME=${DOCKER_USERNAME} && \
              docker stop cicd-app || true && \
