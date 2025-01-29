@@ -30,6 +30,7 @@ jobs:
           echo "Listing files in build/libs/"
           ls -la build/libs/
 
+      # 빌드된 JAR 파일을 프로젝트 루트로 이동
       - name: Move JAR to Project Root
         run: |
           # 🔹 빌드된 JAR 파일을 프로젝트 루트로 이동하여 Docker 빌드 컨텍스트에 포함
