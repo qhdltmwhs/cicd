@@ -23,11 +23,17 @@ jobs:
       # Gradle 빌드
       - name: Build with Gradle
         run: ./gradlew clean build
+
       # Gradle 빌드 후 JAR 파일 위치 확인
       - name: Log JAR File Location
         run: |
           echo "Listing files in build/libs/"
-          ls -la build/libs/  
+          ls -la build/libs/
+
+      - name: Move JAR to Project Root
+        run: |
+          cp build/libs/*.jar app.jar
+          ls -la    
 
       # Docker 로그인
       - name: Login to Docker Hub
