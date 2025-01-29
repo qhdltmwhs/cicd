@@ -60,11 +60,9 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
-          echo "$SSH_PRIVATE_KEY" > private_key.pem
-          chmod 600 private_key.pem
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
-            docker stop cicd-app || true
-            docker rm cicd-app || true
-            docker pull $DOCKER_USERNAME/cicd-app:latest
-            docker run -d --name cicd-app -p 8080:8080 $DOCKER_USERNAME/cicd-app:latest
-          EOF
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST \
+            "export DOCKER_USERNAME=${DOCKER_USERNAME} && \
+             docker stop cicd-app || true && \
+             docker rm cicd-app || true && \
+             docker pull ${DOCKER_USERNAME}/cicd-app:latest && \
+             docker run -d --name cicd-app -p 8080:8080 ${DOCKER_USERNAME}/cicd-app:latest"
