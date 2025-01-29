@@ -24,20 +24,16 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build
 
-      # Gradle 빌드 후 JAR 파일 위치 확인
-      - name: Log JAR File Location
-        run: |
-          echo "Listing files in build/libs/"
-          ls -la build/libs/
-
-      # 빌드된 JAR 파일을 프로젝트 루트로 이동
-      - name: Move JAR to Project Root
-        run: |
-          # 🔹 빌드된 JAR 파일을 프로젝트 루트로 이동하여 Docker 빌드 컨텍스트에 포함
-          # 🔹 Dockerfile에서 COPY 명령어가 제대로 작동하도록 설정
-          cp build/libs/*.jar app.jar
-          # 🔹 현재 디렉토리의 파일 목록을 출력하여 JAR 파일이 정상적으로 이동했는지 확인
-          ls -la    
+#      # Gradle 빌드 후 JAR 파일 위치 확인
+#      - name: Log JAR File Location
+#        run: |
+#          echo "Listing files in build/libs/"
+#          ls -la build/libs/
+#
+#      # 빌드된 JAR 파일을 프로젝트 루트로 이동
+#      - name: Move JAR to Project Root
+#        run: |
+#          cp build/libs/*.jar app.jar
 
       # Docker 로그인
       - name: Login to Docker Hub
