@@ -24,10 +24,21 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build
 
-      # 빌드된 JAR 파일을 프로젝트 루트로 이동
+      # ✅ 빌드된 JAR 파일을 프로젝트 루트로 이동
       - name: Move JAR to Project Root
         run: |
-          cp build/libs/*.jar app.jar
+          cp build/libs/*.jar app.jar  
+
+      # ✅ docker-compose.yml 존재 여부 확인 & 루트로 이동
+      - name: Ensure docker-compose.yml is available
+        run: |
+          if [ -f docker-compose.yml ]; then
+            echo "✅ docker-compose.yml 파일이 존재합니다."
+          else
+            echo "❌ docker-compose.yml 파일이 없습니다! 루트로 이동 시도"
+            find . -name "docker-compose.yml"
+            mv $(find . -name "docker-compose.yml") ./docker-compose.yml || echo "🚨 이동 실패"
+          fi
 
       # Docker 로그인
       - name: Login to Docker Hub
@@ -59,32 +70,27 @@ jobs:
 
           # ✅ EC2에서 프로젝트 폴더가 없으면 생성
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
-            if [ ! -d "~/cicd" ]; then
-              mkdir -p ~/cicd
+            if [ ! -d "$HOME/cicd" ]; then
+              mkdir -p $HOME/cicd
             fi
           EOF
 
-      # ✅ docker-compose.yml을 EC2로 복사 (기존 파일 덮어쓰기)
-      - name: Check if docker-compose.yml exists
-        run: ls -la
-
-      - name: Ensure docker-compose.yml is available
-        run: |
-          cp docker-compose.yml $GITHUB_WORKSPACE/docker-compose.yml
-
+      # ✅ EC2로 docker-compose.yml 복사 (프로젝트 루트에서 가져오기)
       - name: Copy docker-compose.yml to EC2
-        run: scp -o StrictHostKeyChecking=no -i private_key.pem $GITHUB_WORKSPACE/docker-compose.yml $EC2_USER@$EC2_HOST:~/cicd/docker-compose.yml
+        run: |
+          scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml $EC2_USER@$EC2_HOST:$HOME/cicd/docker-compose.yml
 
-          # ✅ 최신 코드
+      - name: Deploy with Docker Compose
+        run: |
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
           export DOCKER_USERNAME=${DOCKER_USERNAME}
-        
+          
           cd $HOME/cicd  # ✅ 프로젝트 폴더 이동
-        
-#          # ✅ 최신 애플리케이션 이미지 가져오기
-#          echo "✅ 최신 애플리케이션 이미지 가져오기"
-#          docker pull ${DOCKER_USERNAME}/cicd-app:latest
-        
+          
+          # ✅ 최신 애플리케이션 이미지 가져오기
+          echo "✅ 최신 애플리케이션 이미지 가져오기"
+          docker pull ${DOCKER_USERNAME}/cicd-app:latest
+          
           # ✅ `docker-compose up -d --remove-orphans` 실행
           echo "✅ docker-compose 실행"
           docker-compose up -d --remove-orphans
