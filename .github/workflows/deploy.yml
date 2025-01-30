@@ -56,12 +56,13 @@ jobs:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
           echo "$SSH_PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
           
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
-          mkdir -p ~/cicd
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << EOF
+            mkdir -p ~/cicd
           EOF
 
       - name: Copy docker-compose.yml to EC2
@@ -76,16 +77,20 @@ jobs:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
-          # EOF를 작은따옴표로 묶지 않습니다! - 환경변수 확장을 위해
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << EOF
             cd ~/cicd
           
-            # 최신 애플리케이션 이미지 가져오기
-            echo "최신 애플리케이션 이미지 가져오기"
+            # ✅ EC2에서 Docker Hub 로그인
+            echo "✅ Docker Hub 로그인"
+            docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
+
+            # ✅ 최신 애플리케이션 이미지 가져오기
+            echo "✅ 최신 애플리케이션 이미지 가져오기"
             docker pull $DOCKER_USERNAME/cicd-app:latest
           
-            # docker-compose 실행
-            echo "docker-compose 실행"
+            # ✅ `docker-compose up -d --remove-orphans` 실행
+            echo "✅ docker-compose 실행"
             docker-compose up -d --remove-orphans
-            EOF
+          EOF
