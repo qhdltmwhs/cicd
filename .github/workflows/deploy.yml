@@ -72,16 +72,20 @@ jobs:
 
       # ✅ 최신 Docker 이미지 가져오고 실행
       - name: Deploy with Docker Compose
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
-            export DOCKER_USERNAME=${DOCKER_USERNAME}
-            cd ~/cicd  # ✅ 프로젝트 폴더 이동
+          # EOF를 작은따옴표로 묶지 않습니다! - 환경변수 확장을 위해
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << EOF
+            cd ~/cicd
           
-            # ✅ 최신 애플리케이션 이미지 가져오기
-            echo "✅ 최신 애플리케이션 이미지 가져오기"
-            docker pull ${DOCKER_USERNAME}/cicd-app:latest
+            # 최신 애플리케이션 이미지 가져오기
+            echo "최신 애플리케이션 이미지 가져오기"
+            docker pull $DOCKER_USERNAME/cicd-app:latest
           
-            # ✅ `docker-compose up -d --remove-orphans` 실행
-            echo "✅ docker-compose 실행"
+            # docker-compose 실행
+            echo "docker-compose 실행"
             docker-compose up -d --remove-orphans
-          EOF
+            EOF
