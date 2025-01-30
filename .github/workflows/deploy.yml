@@ -56,9 +56,28 @@ jobs:
         run: |
           echo "$SSH_PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST \
-            "export DOCKER_USERNAME=${DOCKER_USERNAME} && \
-             docker stop cicd-app || true && \
-             docker rm cicd-app || true && \
-             docker pull ${DOCKER_USERNAME}/cicd-app:latest && \
-             docker run -d --name cicd-app -p 80:8080 ${DOCKER_USERNAME}/cicd-app:latest"
+
+          # ✅ EC2에서 프로젝트 폴더가 없으면 생성
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
+            if [ ! -d "~/cicd" ]; then
+              mkdir -p ~/cicd
+            fi
+          EOF
+
+          # ✅ docker-compose.yml을 EC2로 복사 (기존 파일 덮어쓰기)
+          scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml $EC2_USER@$EC2_HOST:~/cicd/docker-compose.yml
+
+          # ✅ 최신 코드
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
+          export DOCKER_USERNAME=${DOCKER_USERNAME}
+        
+          cd $HOME/cicd  # ✅ 프로젝트 폴더 이동
+        
+          # ✅ 최신 애플리케이션 이미지 가져오기
+          echo "✅ 최신 애플리케이션 이미지 가져오기"
+          docker pull ${DOCKER_USERNAME}/cicd-app:latest
+        
+          # ✅ `docker-compose up -d --remove-orphans` 실행
+          echo "✅ docker-compose 실행"
+          docker-compose up -d --remove-orphans
+          EOF
