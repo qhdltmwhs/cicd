@@ -24,38 +24,19 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew clean build
 
-      # 빌드된 JAR 파일을 프로젝트 루트로 이동
+      # ✅ JAR 파일을 프로젝트 루트로 이동
       - name: Move JAR to Project Root
         run: |
-          echo "✅ JAR 파일을 프로젝트 루트로 이동"
           cp build/libs/*.jar app.jar
-          ls -la  # 이동 후 확인
 
-      # ✅ docker-compose.yml 파일을 프로젝트 루트로 이동 (파일이 없으면 에러 방지)
-      - name: Move docker-compose.yml to Project Root
-        run: |
-          echo "✅ docker-compose.yml 파일 이동 시도..."
-          FILE_PATH=$(find . -name "docker-compose.yml" | head -n 1)
-          
-          if [ -z "$FILE_PATH" ]; then
-          echo "🚨 docker-compose.yml 파일을 찾을 수 없습니다. 실행을 중단합니다."
-          exit 1
-          fi
-          
-          echo "✅ 파일 발견: $FILE_PATH -> 프로젝트 루트로 이동"
-          cp "$FILE_PATH" ./docker-compose.yml
-          
-          echo "✅ 최종 파일 위치 확인:"
-          ls -la
-          
-          # Docker 로그인
+      # ✅ Docker 로그인
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Docker 이미지 빌드 및 푸시
+      # ✅ Docker 이미지 빌드 및 푸시
       - name: Build and Push Docker Image
         run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/cicd-app:latest .
@@ -76,32 +57,27 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
 
-          # ✅ EC2에서 프로젝트 폴더가 없으면 생성
+          # ✅ EC2에서 프로젝트 폴더 생성 (없으면 생성)
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
-            if [ ! -d "$HOME/cicd" ]; then
-              mkdir -p $HOME/cicd
-            fi
+            mkdir -p ~/cicd
           EOF
 
-      # ✅ `docker-compose.yml`을 EC2로 복사
+      # ✅ docker-compose.yml 파일을 EC2로 복사
       - name: Copy docker-compose.yml to EC2
-        run: |
-          echo "✅ EC2로 docker-compose.yml 파일 복사"
-          scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml $EC2_USER@$EC2_HOST:$HOME/cicd/docker-compose.yml
+        run: scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml $EC2_USER@$EC2_HOST:~/cicd/docker-compose.yml
 
-      # ✅ EC2에서 최신 애플리케이션 컨테이너 실행
-      - name: Run docker-compose on EC2
+      # ✅ 최신 Docker 이미지 가져오고 실행
+      - name: Deploy with Docker Compose
         run: |
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
-          export DOCKER_USERNAME=${DOCKER_USERNAME}
+            export DOCKER_USERNAME=${DOCKER_USERNAME}
+            cd ~/cicd  # ✅ 프로젝트 폴더 이동
           
-          cd $HOME/cicd  # ✅ 프로젝트 폴더 이동
-
-          # ✅ 최신 애플리케이션 이미지 가져오기
-          echo "✅ 최신 애플리케이션 이미지 가져오기"
-          docker pull ${DOCKER_USERNAME}/cicd-app:latest
+            # ✅ 최신 애플리케이션 이미지 가져오기
+            echo "✅ 최신 애플리케이션 이미지 가져오기"
+            docker pull ${DOCKER_USERNAME}/cicd-app:latest
           
-          # ✅ `docker-compose up -d --remove-orphans` 실행
-          echo "✅ docker-compose 실행"
-          docker-compose up -d --remove-orphans
+            # ✅ `docker-compose up -d --remove-orphans` 실행
+            echo "✅ docker-compose 실행"
+            docker-compose up -d --remove-orphans
           EOF
