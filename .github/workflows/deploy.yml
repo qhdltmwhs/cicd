@@ -85,10 +85,6 @@ jobs:
             # ✅ EC2에서 Docker Hub 로그인
             echo "✅ Docker Hub 로그인"
             docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
-
-            # ✅ 최신 애플리케이션 이미지 가져오기
-            echo "✅ 최신 애플리케이션 이미지 가져오기"
-            docker pull $DOCKER_USERNAME/cicd-app:latest
           
             # ✅ `docker-compose up -d --remove-orphans` 실행
             echo "✅ docker-compose 실행"
