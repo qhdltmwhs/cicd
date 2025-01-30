@@ -64,8 +64,16 @@ jobs:
             fi
           EOF
 
-          # ✅ docker-compose.yml을 EC2로 복사 (기존 파일 덮어쓰기)
-          scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml $EC2_USER@$EC2_HOST:~/cicd/docker-compose.yml
+      # ✅ docker-compose.yml을 EC2로 복사 (기존 파일 덮어쓰기)
+      - name: Check if docker-compose.yml exists
+        run: ls -la
+
+      - name: Ensure docker-compose.yml is available
+        run: |
+          cp docker-compose.yml $GITHUB_WORKSPACE/docker-compose.yml
+
+      - name: Copy docker-compose.yml to EC2
+        run: scp -o StrictHostKeyChecking=no -i private_key.pem $GITHUB_WORKSPACE/docker-compose.yml $EC2_USER@$EC2_HOST:~/cicd/docker-compose.yml
 
           # ✅ 최신 코드
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
@@ -73,9 +81,9 @@ jobs:
         
           cd $HOME/cicd  # ✅ 프로젝트 폴더 이동
         
-          # ✅ 최신 애플리케이션 이미지 가져오기
-          echo "✅ 최신 애플리케이션 이미지 가져오기"
-          docker pull ${DOCKER_USERNAME}/cicd-app:latest
+#          # ✅ 최신 애플리케이션 이미지 가져오기
+#          echo "✅ 최신 애플리케이션 이미지 가져오기"
+#          docker pull ${DOCKER_USERNAME}/cicd-app:latest
         
           # ✅ `docker-compose up -d --remove-orphans` 실행
           echo "✅ docker-compose 실행"
