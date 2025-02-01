@@ -79,8 +79,8 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
         run: scp -o StrictHostKeyChecking=no -i private_key.pem nginx/default.conf $EC2_USER@$EC2_HOST:~/cicd/nginx/default.conf
 
-      # ✅ 불필요한 Docker 컨테이너 및 이미지 정리 후 배포
-      - name: Cleanup Old Docker Containers and Images, Deploy with Docker Compose
+      # ✅ Blue-Green 배포 적용
+      - name: Blue-Green Deployment
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -88,27 +88,39 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << EOF
-            cd ~/cicd  # ✅ 배포 폴더 이동 (docker-compose.yml 위치)
+            cd ~/cicd
 
-            # ✅ 1️⃣ Docker Hub 로그인 (배포를 위해 Docker Hub에서 이미지 가져오기)
+            # ✅ Docker Hub 로그인
             echo "✅ Docker Hub 로그인"
             docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
 
-            # ✅ 2️⃣ 기존 실행 중인 컨테이너 정리 (현재 실행 중인 컨테이너는 유지)
-            echo "✅ 기존 컨테이너 정리"
-            docker container prune -f  # ⭕ 실행이 중단된 컨테이너만 삭제
+            # ✅ 현재 실행 중인 컨테이너 확인
+            ACTIVE_APP=\$(docker ps --format "{{.Names}}" | grep 'cicd-app' | grep -v "Exited" | head -n 1)
+            echo "현재 실행 중인 앱 컨테이너: \$ACTIVE_APP"
 
-            # ✅ 3️⃣ 최신 애플리케이션 이미지 강제 업데이트
-            echo "✅ 최신 이미지 업데이트"
-            docker pull $DOCKER_USERNAME/cicd-app:latest  # ⭕ 최신 이미지 가져오기 (기존 이미지와 태그가 같아도 최신으로 갱신됨)
+            # ✅ 활성 컨테이너에 따라 새로운 컨테이너 실행
+            if [ "\$ACTIVE_APP" == "cicd-app-blue" ]; then
+              echo "현재 Blue 실행 중 -> Green 배포 시작"
+              docker-compose up -d --no-deps cicd-app-green
+              NEW_APP="cicd-app-green"
+            else
+              echo "현재 Green 실행 중 -> Blue 배포 시작"
+              docker-compose up -d --no-deps cicd-app-blue
+              NEW_APP="cicd-app-blue"
+            fi
 
-            # ✅ 4️⃣ 최신 컨테이너 실행 (기존 컨테이너와 병행 실행하여 무중단 배포)
-            echo "✅ docker-compose 실행"
-            docker-compose up -d --remove-orphans  # ⭕ 새로운 컨테이너 실행 후, 필요 없는 컨테이너 삭제
+            # ✅ 새 컨테이너가 정상적으로 기동되는지 확인 후 트래픽 변경
+            echo "Nginx가 새 컨테이너로 트래픽을 전달하도록 설정 변경"
+            sed -i "s/server \$ACTIVE_APP:8080;/server \$NEW_APP:8080;/g" ~/cicd/nginx/default.conf
 
-            # ✅ 5️⃣ 오래된 Docker 이미지 삭제 (24시간 이상 지난 이미지 삭제)
+            # ✅ Nginx 재시작
+            docker restart nginx-container
+
+            # ✅ 이전 컨테이너 종료 및 삭제
+            docker stop \$ACTIVE_APP && docker rm \$ACTIVE_APP
+
+            # ✅ 불필요한 Docker 이미지 정리
             echo "✅ 오래된 Docker 이미지 삭제"
-            docker image prune -a --filter "until=24h" -f  # ⭕ 24시간 이상 사용되지 않은 모든 이미지 삭제
-            docker image prune -af  # ⭕ 태그가 없는 이미지(중간 빌드 캐시 포함) 모두 삭제
-
+            docker image prune -a --filter "until=24h" -f  # 24시간 이상 사용되지 않은 모든 이미지 삭제
+            docker image prune -af  # 태그가 없는 이미지(중간 빌드 캐시 포함) 모두 삭제
           EOF
