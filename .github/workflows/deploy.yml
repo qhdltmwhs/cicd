@@ -88,22 +88,27 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << EOF
-            cd ~/cicd
-          
-            # ✅ EC2에서 Docker Hub 로그인
+            cd ~/cicd  # ✅ 배포 폴더 이동 (docker-compose.yml 위치)
+
+            # ✅ 1️⃣ Docker Hub 로그인 (배포를 위해 Docker Hub에서 이미지 가져오기)
             echo "✅ Docker Hub 로그인"
             docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
 
-            # ✅ 기존 실행 중인 컨테이너 정리 (현재 실행 중인 컨테이너는 유지)
+            # ✅ 2️⃣ 기존 실행 중인 컨테이너 정리 (현재 실행 중인 컨테이너는 유지)
             echo "✅ 기존 컨테이너 정리"
-            docker container prune -f
+            docker container prune -f  # ⭕ 실행이 중단된 컨테이너만 삭제
 
-            # ✅ 오래된 사용되지 않는 이미지 삭제
-            echo "✅ 오래된 Docker 이미지 삭제"
-            docker image prune -a --filter "until=24h" -f
+            # ✅ 3️⃣ 최신 애플리케이션 이미지 강제 업데이트
+            echo "✅ 최신 이미지 업데이트"
+            docker pull $DOCKER_USERNAME/cicd-app:latest  # ⭕ 최신 이미지 가져오기 (기존 이미지와 태그가 같아도 최신으로 갱신됨)
 
-            # ✅ `docker-compose up -d --remove-orphans` 실행
+            # ✅ 4️⃣ 최신 컨테이너 실행 (기존 컨테이너와 병행 실행하여 무중단 배포)
             echo "✅ docker-compose 실행"
-            docker pull $DOCKER_USERNAME/cicd-app:latest  # ✅ 최신 이미지 강제 업데이트
-            docker-compose up -d --remove-orphans
+            docker-compose up -d --remove-orphans  # ⭕ 새로운 컨테이너 실행 후, 필요 없는 컨테이너 삭제
+
+            # ✅ 5️⃣ 오래된 Docker 이미지 삭제 (24시간 이상 지난 이미지 삭제)
+            echo "✅ 오래된 Docker 이미지 삭제"
+            docker image prune -a --filter "until=24h" -f  # ⭕ 24시간 이상 사용되지 않은 모든 이미지 삭제
+            docker image prune -af  # ⭕ 태그가 없는 이미지(중간 빌드 캐시 포함) 모두 삭제
+
           EOF
