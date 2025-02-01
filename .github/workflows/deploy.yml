@@ -104,5 +104,6 @@ jobs:
 
             # ✅ `docker-compose up -d --remove-orphans` 실행
             echo "✅ docker-compose 실행"
+            docker pull $DOCKER_USERNAME/cicd-app:latest  # ✅ 최신 이미지 강제 업데이트
             docker-compose up -d --remove-orphans
           EOF
