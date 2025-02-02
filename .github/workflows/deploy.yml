@@ -36,7 +36,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # ✅ Docker 이미지 빌드 및 푸시 (하나의 공통 이미지)
+      # ✅ Docker 이미지 빌드 및 푸시 (공통 cicd-app 이미지)
       - name: Build and Push Docker Image
         run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/cicd-app:latest .
@@ -94,10 +94,17 @@ jobs:
             echo "✅ Docker Hub 로그인"
             docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
 
+            # ✅ docker-compose 실행 (Nginx, MySQL 실행 보장)
+            echo "✅ docker-compose 실행 (Nginx, MySQL 실행 보장)"
+            docker-compose up -d --remove-orphans
+
             # ✅ 현재 실행 중인 컨테이너 확인
             CURRENT_APP=\$(docker ps --format "{{.Names}}" | grep 'cicd-app-' | head -n 1)
 
-            if [ "\$CURRENT_APP" == "cicd-app-blue" ]; then
+            if [ -z "\$CURRENT_APP" ]; then
+              echo "⚠️ 실행 중인 컨테이너가 없음. Blue 컨테이너부터 실행."
+              NEW_APP="cicd-app-blue"
+            elif [ "\$CURRENT_APP" == "cicd-app-blue" ]; then
               NEW_APP="cicd-app-green"
             else
               NEW_APP="cicd-app-blue"
@@ -119,10 +126,12 @@ jobs:
             sed -i "s|proxy_pass http://.*:8080;|proxy_pass http://\$NEW_APP:8080;|g" ~/cicd/nginx/default.conf
             docker exec nginx-container nginx -s reload
 
-            # ✅ 기존 컨테이너 종료 및 삭제
-            echo "✅ 기존 컨테이너 정리: \$CURRENT_APP"
-            docker stop \$CURRENT_APP || true
-            docker rm \$CURRENT_APP || true
+            # ✅ 기존 컨테이너 종료 및 삭제 (최초 배포 시 예외 처리)
+            if [ ! -z "\$CURRENT_APP" ]; then
+              echo "✅ 기존 컨테이너 정리: \$CURRENT_APP"
+              docker stop \$CURRENT_APP || true
+              docker rm \$CURRENT_APP || true
+            fi
 
             # ✅ 불필요한 Docker 이미지 정리
             echo "✅ 불필요한 Docker 이미지 삭제"
