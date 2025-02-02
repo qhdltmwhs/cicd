@@ -118,13 +118,13 @@ jobs:
             # ✅ Nginx 재시작 (변경 사항 적용)
             docker restart nginx-container || docker-compose up -d nginx
 
-#            # ✅ 기존 애플리케이션 컨테이너 종료 및 삭제
-#            echo "✅ 기존 애플리케이션 컨테이너 정리: \$OLD_APP"
-#            docker stop \$OLD_APP || echo "⚠️ 컨테이너 종료 오류 발생"
-#            docker rm \$OLD_APP || echo "⚠️ 컨테이너 삭제 오류 발생"
-#
-#            # ✅ 불필요한 Docker 이미지 삭제 (24시간 이상 지난 이미지 삭제)
-#            echo "✅ 오래된 Docker 이미지 삭제"
-#            docker image prune -a --filter "until=24h" -f
-#            docker image prune -af
+            # ✅ 기존 애플리케이션 컨테이너 종료 및 삭제
+            echo "✅ 기존 애플리케이션 컨테이너 정리: \$OLD_APP"
+            docker stop \$OLD_APP || echo "⚠️ 컨테이너 종료 오류 발생"
+            docker rm \$OLD_APP || echo "⚠️ 컨테이너 삭제 오류 발생"
+
+            # ✅ 불필요한 Docker 이미지 삭제 (24시간 이상 지난 이미지 삭제)
+            echo "✅ 오래된 Docker 이미지 삭제"
+            docker image prune -a --filter "until=24h" -f
+            docker image prune -af
           EOF
