@@ -36,7 +36,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # ✅ Docker 이미지 빌드 및 푸시
+      # ✅ Docker 이미지 빌드 및 푸시 (하나의 최신 이미지만 유지)
       - name: Build and Push Docker Image
         run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/cicd-app:latest .
@@ -65,15 +65,17 @@ jobs:
             mkdir -p ~/cicd/nginx
           EOF
 
-      - name: Copy docker-compose.yml to EC2
+      # ✅ docker-compose.yml 및 Nginx 설정 파일을 EC2로 복사
+      - name: Copy Configuration Files to EC2
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST "mkdir -p ~/cicd"
           scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml $EC2_USER@$EC2_HOST:~/cicd/docker-compose.yml
+          scp -o StrictHostKeyChecking=no -i private_key.pem nginx/default.conf $EC2_USER@$EC2_HOST:~/cicd/nginx/default.conf
 
-      - name: Deploy with Blue-Green Deployment
+      # ✅ 불필요한 Docker 컨테이너 및 이미지 정리 후 배포
+      - name: Blue-Green Deployment with Cleanup
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -81,12 +83,13 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << EOF
-            cd ~/cicd
+            cd ~/cicd  # ✅ 배포 폴더 이동 (docker-compose.yml 위치)
 
-            # ✅ Docker Hub 로그인
+            # ✅ 1️⃣ Docker Hub 로그인
+            echo "✅ Docker Hub 로그인"
             docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
 
-            # ✅ 현재 실행 중인 컨테이너 확인
+            # ✅ 2️⃣ 현재 실행 중인 Blue-Green 컨테이너 확인
             CURRENT_APP=\$(docker ps --format "{{.Names}}" | grep -E 'cicd-app-blue|cicd-app-green' || echo "none")
 
             if [ "\$CURRENT_APP" = "cicd-app-green" ]; then
@@ -100,30 +103,29 @@ jobs:
             echo "✅ 현재 실행 중인 앱 컨테이너: \$CURRENT_APP"
             echo "✅ 새로운 애플리케이션 컨테이너 실행: \$NEW_APP"
 
-            # ✅ 기존 컨테이너 정리
-            if docker ps -q --filter "name=\$OLD_APP" | grep -q .; then
-                echo "✅ 기존 컨테이너 \$OLD_APP 중지 및 삭제"
-                docker stop \$OLD_APP
-                docker rm \$OLD_APP
+            # ✅ 3️⃣ 기존 컨테이너 삭제
+            if docker ps -a --format "{{.Names}}" | grep -q "\$NEW_APP"; then
+                echo "✅ 기존 컨테이너 \$NEW_APP 삭제"
+                docker stop \$NEW_APP
+                docker rm \$NEW_APP
             else
-                echo "⚠️ 기존 컨테이너 \$OLD_APP이 존재하지 않음. 삭제 스킵"
+                echo "⚠️ 기존 컨테이너 \$NEW_APP이 존재하지 않음. 삭제 스킵"
             fi
 
-            # ✅ 새로운 컨테이너 실행 (공통 이미지 사용)
+            # ✅ 4️⃣ 최신 애플리케이션 이미지 가져오기 (공통 최신 이미지 사용)
             docker pull $DOCKER_USERNAME/cicd-app:latest
+
+            # ✅ 5️⃣ 새로운 컨테이너 실행
             docker run -d --name \$NEW_APP --network app_network -p 8080:8080 $DOCKER_USERNAME/cicd-app:latest
 
-            # ✅ Nginx 컨테이너가 없으면 실행
-            docker ps -a | grep nginx-container || docker-compose up -d nginx
+            # ✅ 6️⃣ 전체 컨테이너 실행 (MySQL, Nginx 포함)
+            docker-compose up -d --remove-orphans
 
-            # ✅ MySQL 컨테이너가 없으면 실행
-            docker ps -a | grep mysql-container || docker-compose up -d mysql
-
-            # ✅ Nginx 설정 변경 및 재시작
+            # ✅ 7️⃣ Nginx 트래픽 변경 (Blue -> Green 스위칭)
             sed -i "s/$OLD_APP/$NEW_APP/g" ~/cicd/nginx/default.conf || true
             docker restart nginx-container || docker-compose up -d nginx
 
-            # ✅ 불필요한 Docker 이미지 정리
+            # ✅ 8️⃣ 불필요한 Docker 이미지 정리
             echo "✅ 불필요한 Docker 이미지 삭제"
             docker image prune -a --filter "until=24h" -f
           EOF

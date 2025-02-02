@@ -7,38 +7,38 @@ services:
     container_name: nginx-container
     restart: always
     ports:
-      - "80:80"  # ✅ 클라이언트 요청을 80번 포트에서 수신
+      - "80:80"
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro  # ✅ Nginx 설정 파일 추가
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - cicd-app-blue
-      - cicd-app-green  # ✅ Blue-Green 배포 적용
+      - cicd-app-green
     networks:
       - app_network
 
   cicd-app-blue:
     container_name: cicd-app-blue
-    image: mone921111/cicd-app-blue:latest  # ✅ Blue 버전
+    image: mone921111/cicd-app:latest  # ✅ 공통 최신 이미지 사용
     restart: always
     depends_on:
       - mysql-container
     environment:
       - SPRING_PROFILES_ACTIVE=prod
     ports:
-      - "8081:8080"  # ✅ Blue는 8081 포트에서 실행
+      - "8081:8080"
     networks:
       - app_network
 
   cicd-app-green:
     container_name: cicd-app-green
-    image: mone921111/cicd-app-green:latest  # ✅ Green 버전
+    image: mone921111/cicd-app:latest  # ✅ 공통 최신 이미지 사용
     restart: always
     depends_on:
       - mysql-container
     environment:
       - SPRING_PROFILES_ACTIVE=prod
     ports:
-      - "8082:8080"  # ✅ Green은 8082 포트에서 실행
+      - "8082:8080"
     networks:
       - app_network
 
@@ -52,7 +52,7 @@ services:
       MYSQL_USER: demo_user
       MYSQL_PASSWORD: 1318
     volumes:
-      - mysql_data:/var/lib/mysql  # ✅ MySQL 데이터를 영구 저장
+      - mysql_data:/var/lib/mysql
     networks:
       - app_network
 
