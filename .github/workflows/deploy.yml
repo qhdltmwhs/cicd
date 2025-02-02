@@ -1,6 +1,5 @@
 name: Deploy to AWS EC2 via Docker Hub
 
-
 on:
   push:
     branches:
@@ -10,11 +9,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-
 
       # Java 17 설치
       - name: Set up JDK 17
@@ -23,17 +20,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-
       # Gradle 빌드
       - name: Build with Gradle
         run: ./gradlew clean build
-
 
       # ✅ JAR 파일을 프로젝트 루트로 이동
       - name: Move JAR to Project Root
         run: |
           cp build/libs/*.jar app.jar
-      
 
       # ✅ Docker 로그인
       - name: Login to Docker Hub
@@ -42,23 +36,19 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-
-      # ✅ Docker 이미지 빌드 및 푸시
+      # ✅ Docker 이미지 빌드 및 푸시 (하나의 공통 이미지)
       - name: Build and Push Docker Image
         run: |
           docker build -t ${{ secrets.DOCKER_USERNAME }}/cicd-app:latest .
           docker push ${{ secrets.DOCKER_USERNAME }}/cicd-app:latest
-  
 
   deploy:
     runs-on: ubuntu-latest
     needs: build
 
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-
 
       - name: Setup SSH and Deploy
         env:
@@ -74,59 +64,57 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << EOF
             mkdir -p ~/cicd/nginx
           EOF
-      
 
       # ✅ docker-compose.yml을 EC2로 복사
       - name: Copy docker-compose.yml to EC2
-        env:
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
         run: scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml $EC2_USER@$EC2_HOST:~/cicd/docker-compose.yml
-
 
       # ✅ Nginx 설정 파일 복사
       - name: Copy Nginx Config to EC2
-        env:
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
         run: scp -o StrictHostKeyChecking=no -i private_key.pem nginx/default.conf $EC2_USER@$EC2_HOST:~/cicd/nginx/default.conf
 
-
-      # ✅ 불필요한 Docker 컨테이너 및 이미지 정리 후 배포
-      - name: Cleanup Old Docker Containers and Images, Deploy with Docker Compose
-        env:
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      # ✅ 배포 및 Blue-Green 전환
+      - name: Deploy with Blue-Green Switching
         run: |
           ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << EOF
-            cd ~/cicd  # ✅ 배포 폴더 이동 (docker-compose.yml 위치)
-          
-          
-            # ✅ 1️⃣ Docker Hub 로그인 (배포를 위해 Docker Hub에서 이미지 가져오기)
+            cd ~/cicd
+
+            # ✅ Docker Hub 로그인
             echo "✅ Docker Hub 로그인"
             docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
-          
-          
-            # ✅ 2️⃣ 기존 실행 중인 컨테이너 정리 (현재 실행 중인 컨테이너는 유지)
-            echo "✅ 기존 컨테이너 정리"
-            docker container prune -f  # ⭕ 실행이 중단된 컨테이너만 삭제
-          
-          
-            # ✅ 3️⃣ 최신 애플리케이션 이미지 강제 업데이트
+
+            # ✅ 현재 실행 중인 컨테이너 확인
+            CURRENT_APP=\$(docker ps --format "{{.Names}}" | grep 'cicd-app-' | head -n 1)
+
+            if [ "\$CURRENT_APP" == "cicd-app-blue" ]; then
+              NEW_APP="cicd-app-green"
+            else
+              NEW_APP="cicd-app-blue"
+            fi
+
+            echo "✅ 현재 실행 중인 컨테이너: \$CURRENT_APP"
+            echo "✅ 새로운 컨테이너로 변경: \$NEW_APP"
+
+            # ✅ 최신 애플리케이션 이미지 강제 업데이트
             echo "✅ 최신 이미지 업데이트"
-            docker pull $DOCKER_USERNAME/cicd-app:latest  # ⭕ 최신 이미지 가져오기 (기존 이미지와 태그가 같아도 최신으로 갱신됨)
-          
-          
-            # ✅ 4️⃣ 최신 컨테이너 실행 (기존 컨테이너와 병행 실행하여 무중단 배포)
-            echo "✅ docker-compose 실행"
-            docker-compose up -d --remove-orphans  # ⭕ 새로운 컨테이너 실행 후, 필요 없는 컨테이너 삭제
-          
-          
-            # ✅ 5️⃣ 오래된 Docker 이미지 삭제 (24시간 이상 지난 이미지 삭제)
-            echo "✅ 오래된 Docker 이미지 삭제"
-            docker image prune -a --filter "until=24h" -f  # ⭕ 24시간 이상 사용되지 않은 모든 이미지 삭제
-            docker image prune -af  # ⭕ 태그가 없는 이미지(중간 빌드 캐시 포함) 모두 삭제
-            
+            docker pull $DOCKER_USERNAME/cicd-app:latest
+
+            # ✅ 새로운 컨테이너 실행
+            echo "✅ 새로운 컨테이너 실행: \$NEW_APP"
+            docker run -d --name \$NEW_APP --network app_network -e SPRING_PROFILES_ACTIVE=prod $DOCKER_USERNAME/cicd-app:latest
+
+            # ✅ Nginx 설정 변경
+            echo "✅ Nginx 설정 변경"
+            sed -i "s|proxy_pass http://.*:8080;|proxy_pass http://\$NEW_APP:8080;|g" ~/cicd/nginx/default.conf
+            docker exec nginx-container nginx -s reload
+
+            # ✅ 기존 컨테이너 종료 및 삭제
+            echo "✅ 기존 컨테이너 정리: \$CURRENT_APP"
+            docker stop \$CURRENT_APP || true
+            docker rm \$CURRENT_APP || true
+
+            # ✅ 불필요한 Docker 이미지 정리
+            echo "✅ 불필요한 Docker 이미지 삭제"
+            docker image prune -a --filter "until=24h" -f
+            docker image prune -af
           EOF
