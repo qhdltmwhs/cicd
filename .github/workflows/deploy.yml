@@ -65,21 +65,14 @@ jobs:
             mkdir -p ~/cicd/nginx
           EOF
 
-      # ✅ docker-compose.yml을 EC2로 복사
       - name: Copy docker-compose.yml to EC2
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
-        run: scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml $EC2_USER@$EC2_HOST:~/cicd/docker-compose.yml
+        run: |
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST "mkdir -p ~/cicd"
+          scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml $EC2_USER@$EC2_HOST:~/cicd/docker-compose.yml
 
-      # ✅ Nginx 설정 파일 복사
-      - name: Copy Nginx Config to EC2
-        env:
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-        run: scp -o StrictHostKeyChecking=no -i private_key.pem nginx/default.conf $EC2_USER@$EC2_HOST:~/cicd/nginx/default.conf
-
-      # ✅ Blue-Green 배포 실행
       - name: Deploy with Blue-Green Deployment
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
@@ -107,22 +100,30 @@ jobs:
             echo "✅ 현재 실행 중인 앱 컨테이너: \$CURRENT_APP"
             echo "✅ 새로운 애플리케이션 컨테이너 실행: \$NEW_APP"
 
-            # ✅ 기존 컨테이너 중지 후 삭제
-            docker stop \$NEW_APP || true
-            docker rm \$NEW_APP || true
+            # ✅ 기존 컨테이너 정리
+            if docker ps -q --filter "name=\$OLD_APP" | grep -q .; then
+                echo "✅ 기존 컨테이너 \$OLD_APP 중지 및 삭제"
+                docker stop \$OLD_APP
+                docker rm \$OLD_APP
+            else
+                echo "⚠️ 기존 컨테이너 \$OLD_APP이 존재하지 않음. 삭제 스킵"
+            fi
 
             # ✅ 새로운 컨테이너 실행 (공통 이미지 사용)
-            docker run -d --name \$NEW_APP -p 8080:8080 $DOCKER_USERNAME/cicd-app:latest
+            docker pull $DOCKER_USERNAME/cicd-app:latest
+            docker run -d --name \$NEW_APP --network app_network -p 8080:8080 $DOCKER_USERNAME/cicd-app:latest
+
+            # ✅ Nginx 컨테이너가 없으면 실행
+            docker ps -a | grep nginx-container || docker-compose up -d nginx
+
+            # ✅ MySQL 컨테이너가 없으면 실행
+            docker ps -a | grep mysql-container || docker-compose up -d mysql
 
             # ✅ Nginx 설정 변경 및 재시작
             sed -i "s/$OLD_APP/$NEW_APP/g" ~/cicd/nginx/default.conf || true
             docker restart nginx-container || docker-compose up -d nginx
 
-            # ✅ 기존 애플리케이션 컨테이너 정리
-            docker stop \$OLD_APP || true
-            docker rm \$OLD_APP || true
-
             # ✅ 불필요한 Docker 이미지 정리
+            echo "✅ 불필요한 Docker 이미지 삭제"
             docker image prune -a --filter "until=24h" -f
-            docker image prune -af
           EOF
