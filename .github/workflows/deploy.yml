@@ -79,7 +79,7 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
         run: scp -o StrictHostKeyChecking=no -i private_key.pem nginx/default.conf $EC2_USER@$EC2_HOST:~/cicd/nginx/default.conf
 
-      # ✅ 배포 실행 (무중단 Blue-Green)
+      # ✅ Blue-Green 배포 실행
       - name: Deploy with Blue-Green Deployment
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
@@ -91,10 +91,9 @@ jobs:
             cd ~/cicd
 
             # ✅ Docker Hub 로그인
-            echo "✅ Docker Hub 로그인"
             docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
 
-            # ✅ 실행 중인 컨테이너 확인
+            # ✅ 현재 실행 중인 컨테이너 확인
             CURRENT_APP=\$(docker ps --format "{{.Names}}" | grep -E 'cicd-app-blue|cicd-app-green' || echo "none")
 
             if [ "\$CURRENT_APP" = "cicd-app-green" ]; then
@@ -108,23 +107,22 @@ jobs:
             echo "✅ 현재 실행 중인 앱 컨테이너: \$CURRENT_APP"
             echo "✅ 새로운 애플리케이션 컨테이너 실행: \$NEW_APP"
 
-            # ✅ 새로운 컨테이너 실행 (이전 컨테이너는 유지)
-            docker run -d --name \$NEW_APP -p 8080:8080 $DOCKER_USERNAME/cicd-app:latest || echo "⚠️ 컨테이너 실행 오류 발생"
+            # ✅ 기존 컨테이너 중지 후 삭제
+            docker stop \$NEW_APP || true
+            docker rm \$NEW_APP || true
 
-            # ✅ Nginx가 새로운 컨테이너로 트래픽 전달하도록 설정 변경
-            echo "✅ Nginx 트래픽 변경"
-            sed -i "s/$OLD_APP/$NEW_APP/g" ~/cicd/nginx/default.conf
+            # ✅ 새로운 컨테이너 실행 (공통 이미지 사용)
+            docker run -d --name \$NEW_APP -p 8080:8080 $DOCKER_USERNAME/cicd-app:latest
 
-            # ✅ Nginx 재시작 (변경 사항 적용)
+            # ✅ Nginx 설정 변경 및 재시작
+            sed -i "s/$OLD_APP/$NEW_APP/g" ~/cicd/nginx/default.conf || true
             docker restart nginx-container || docker-compose up -d nginx
 
-            # ✅ 기존 애플리케이션 컨테이너 종료 및 삭제
-            echo "✅ 기존 애플리케이션 컨테이너 정리: \$OLD_APP"
-            docker stop \$OLD_APP || echo "⚠️ 컨테이너 종료 오류 발생"
-            docker rm \$OLD_APP || echo "⚠️ 컨테이너 삭제 오류 발생"
+            # ✅ 기존 애플리케이션 컨테이너 정리
+            docker stop \$OLD_APP || true
+            docker rm \$OLD_APP || true
 
-            # ✅ 불필요한 Docker 이미지 삭제 (24시간 이상 지난 이미지 삭제)
-            echo "✅ 오래된 Docker 이미지 삭제"
+            # ✅ 불필요한 Docker 이미지 정리
             docker image prune -a --filter "until=24h" -f
             docker image prune -af
           EOF
