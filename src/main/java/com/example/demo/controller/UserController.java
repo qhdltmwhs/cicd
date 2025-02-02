@@ -16,7 +16,7 @@ public class UserController {
 
     @GetMapping("/")
     public String home() {
-        return "AWS EC2 CI/CD DEPLOY (Blue Green Not Yeah..)";
+        return "AWS EC2 CI/CD DEPLOY (Blue Green Not Yeah..^^)";
     }
 
     @GetMapping("/users")
